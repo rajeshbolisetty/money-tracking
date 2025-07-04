@@ -5,8 +5,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-} from "@mui/material";
-import type { FC } from "react";
+} from '@mui/material';
+import type { FC } from 'react';
 
 interface Transaction {
   [key: string]: any;
@@ -33,8 +33,8 @@ const TransactionTable: FC<Props> = ({ headers, rows }) => {
           {rows.map((row, rowIndex) => (
             <TableRow key={rowIndex}>
               {headers.map((header) => (
-                <TableCell sx={{ color: "white" }} key={header}>
-                  {row[header] ?? ""}
+                <TableCell sx={{ color: 'white' }} key={header}>
+                  {row[header] ?? ''}
                 </TableCell>
               ))}
             </TableRow>

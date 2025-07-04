@@ -1,7 +1,7 @@
-import type { ChangeEvent, FC } from "react";
-import { Button } from "@mui/material";
-import { styled } from "@mui/material/styles";
-import Papa from "papaparse";
+import type { ChangeEvent, FC } from 'react';
+import { Button } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import Papa from 'papaparse';
 
 interface Props {
   className?: string;
@@ -11,15 +11,15 @@ interface Props {
   onDataParsed: (data: unknown[]) => void;
 }
 
-const VisuallyHiddenInput = styled("input")({
-  clip: "rect(0 0 0 0)",
-  clipPath: "inset(50%)",
+const VisuallyHiddenInput = styled('input')({
+  clip: 'rect(0 0 0 0)',
+  clipPath: 'inset(50%)',
   height: 1,
-  overflow: "hidden",
-  position: "absolute",
+  overflow: 'hidden',
+  position: 'absolute',
   bottom: 0,
   left: 0,
-  whiteSpace: "nowrap",
+  whiteSpace: 'nowrap',
   width: 1,
 });
 
@@ -34,9 +34,9 @@ const FileUpload: FC<Props> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    if (extension !== "csv") {
-      alert("Only CSV files are supported.");
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    if (extension !== 'csv') {
+      alert('Only CSV files are supported.');
       return;
     }
 
@@ -54,7 +54,7 @@ const FileUpload: FC<Props> = ({
     };
 
     reader.readAsText(file);
-    e.target.value = "";
+    e.target.value = '';
   };
 
   return (
@@ -64,7 +64,7 @@ const FileUpload: FC<Props> = ({
       variant="contained"
       component="label"
     >
-      {text || ""}
+      {text || ''}
       <VisuallyHiddenInput
         type="file"
         accept={fileFormats}
