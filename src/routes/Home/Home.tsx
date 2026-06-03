@@ -26,7 +26,7 @@ const Home = () => {
   const [headers, setHeaders] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState('');
 
-  const groupByOptions = ['None', 'Date', 'Type', 'Particulars'];
+  const groupByOptions = ['None', 'Date', 'Type', 'Particulars', 'Payee'];
 
   const handleDataParsed = (data: any[]) => {
     setRows(data);
