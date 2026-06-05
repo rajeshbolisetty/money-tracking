@@ -10,9 +10,12 @@ import {
   Select,
   Card,
   CardContent,
+  Collapse,
   IconButton,
   Tooltip,
 } from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LogoutIcon from '@mui/icons-material/Logout';
 import FileUpload from '../../components/FileUploader/FileUploader';
 import TransactionTable from '../../components/TransactionsTable/TransactionsTable';
@@ -20,12 +23,81 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../services/firebase';
 import { useNavigate } from 'react-router-dom';
 
+const payeeGroups: Record<string, Record<string, string[]>> = {
+  Essentials: {
+    Groceries: [
+      'PAK N SAVE WESTGATE',
+      'WOOLWORTHS NZ/WESTGATE',
+      'Pak N Save Lincoln Road',
+      'WOOLWORTHS NZ/76 QUAY STR',
+      'WOOLWORTHS',
+    ],
+    Fuel: ['PAK N SAVE FUEL WESTGATE'],
+    'Car Insurance': ['AMI Insurance'],
+  },
+  Food: {
+    Both: [
+      'JEWEL OF INDIA',
+      'ORDER MEAL',
+      'SUBWAY WESTGATE',
+      'Scarecrow',
+      'THE TRUSTS ARENA',
+      'BURGERFUEL WESTGATE',
+      'BURGER KING',
+      'TANK NWSC WESTGATE',
+      'SHUBH RESTAURANT AND TAKE',
+      'Duck Island Ice Crea',
+    ],
+    Raji: ['FISHER AND PAYKEL HEA', 'F P DANIELL CAFE', 'DD *DOORDASH NANDOS'],
+    Rajesh: [
+      'SUBWAY WILLIAM PICKERING',
+      'Katsubi Rosedale',
+      'MUFFIN BREAK NORTHWE',
+      'KFC WEST CITY MALL - 624',
+      'MCDONALDS WESTGATE',
+    ],
+  },
+  Lifestyle: {
+    Gym: ['DBS*Jetts Henderson'],
+    Entertainment: ['EVENT CINEMAS WESTGATE', 'Chemist Warehouse'],
+  },
+  Misc: {
+    'One off': [
+      'FARMERS NORTH WEST',
+      'HARVEY NORMAN WESTGATE',
+      'GLASSONS - NORTHWEST',
+      'WASH DEPOT HENDERSON',
+      'THE WAREHOUSE 208 WESTGAT',
+      'SMZ*Everlast Nails No61',
+      'AUCKLANDTRANSPORTPARKING',
+    ],
+    Immigration: [
+      'DEPT OF INTERNAL AFFAIRS',
+      'MEG STAR',
+      'WAREHOUSE STATIONERY WES',
+    ],
+    Dental: [
+      'DR ANDY GRAYSON',
+      'IAN CATHRO (ORAL SUR)',
+      'ASCOT HOSPITAL PARKING',
+    ],
+  },
+
+  'Incoming payments': {
+    Paid: ['PAYMENT - THANK YOU'],
+    Rewards: ['BNZ Cash Reward'],
+  },
+};
+
 const Home = () => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<any[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState('');
   const [sortBy, setSortBy] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const groupByOptions = ['None', 'Date', 'Type', 'Particulars', 'Payee'];
   const sortByOptions = ['None', ...headers];
@@ -34,6 +106,9 @@ const Home = () => {
     headers.find((header) => header.trim().toLowerCase().includes('amount')) ||
     headers.find((header) => header.trim().toLowerCase() === 'debit') ||
     headers.find((header) => header.trim().toLowerCase() === 'credit');
+  const displayHeaders = ['Date', 'Payee', amountHeader]
+    .filter((header): header is string => Boolean(header))
+    .map((header) => headers.find((item) => item === header) || header);
 
   const resolveHeaderKey = (key: string) =>
     headers.find(
@@ -41,6 +116,30 @@ const Home = () => {
     ) || key;
 
   const getRowValue = (row: any, key: string) => row[resolveHeaderKey(key)];
+
+  const getGroupedPayee = (payee: unknown) => {
+    if (typeof payee !== 'string') return payee || 'Unknown';
+
+    const normalizePayee = (value: string) =>
+      value.trim().toLowerCase().replace(/\s+/g, ' ');
+    const normalizedPayee = normalizePayee(payee);
+    for (const [category, groups] of Object.entries(payeeGroups)) {
+      for (const [group, payees] of Object.entries(groups)) {
+        const matched = payees.some((groupedPayee) => {
+          const normalizedGroupedPayee = normalizePayee(groupedPayee);
+
+          return (
+            normalizedPayee.includes(normalizedGroupedPayee) ||
+            normalizedGroupedPayee.includes(normalizedPayee)
+          );
+        });
+
+        if (matched) return `${category} / ${group}`;
+      }
+    }
+
+    return `Uncategorised / ${payee || 'Unknown'}`;
+  };
 
   const handleDataParsed = (data: any[]) => {
     setRows(data);
@@ -52,11 +151,19 @@ const Home = () => {
     setHeaders([]);
     setGroupBy('');
     setSortBy('');
+    setExpandedGroups({});
   };
 
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/login');
+  };
+
+  const toggleGroup = (group: string) => {
+    setExpandedGroups((current) => ({
+      ...current,
+      [group]: !current[group],
+    }));
   };
 
   const groupTransactions = (
@@ -65,7 +172,12 @@ const Home = () => {
   ): Record<string, any[]> => {
     return rows.reduce(
       (acc, row) => {
-        const groupValue = getRowValue(row, key) || 'Unknown';
+        const resolvedKey = resolveHeaderKey(key);
+        const rowValue = getRowValue(row, resolvedKey);
+        const groupValue =
+          resolvedKey.trim().toLowerCase() === 'payee'
+            ? getGroupedPayee(rowValue)
+            : rowValue || 'Unknown';
         if (!acc[groupValue]) acc[groupValue] = [];
         acc[groupValue].push(row);
         return acc;
@@ -136,6 +248,8 @@ const Home = () => {
   const isSortingByAmount = Boolean(
     sortBy && amountHeader && resolveHeaderKey(sortBy) === amountHeader,
   );
+  const isPayeeGrouping =
+    groupBy && resolveHeaderKey(groupBy).trim().toLowerCase() === 'payee';
 
   const groupedTransactions = groupBy
     ? Object.entries(groupTransactions(rows, groupBy))
@@ -151,6 +265,65 @@ const Home = () => {
           return groupA.localeCompare(groupB, undefined, {
             sensitivity: 'base',
           });
+        })
+    : [];
+  const groupedPayeeCategories = isPayeeGrouping
+    ? Object.entries(
+        groupedTransactions.reduce(
+          (acc, [group, groupedRows]) => {
+            const [category, section] = group.includes(' / ')
+              ? group.split(' / ', 2)
+              : ['Other', group];
+
+            if (!acc[category]) {
+              acc[category] = {
+                rows: [],
+                sections: {},
+              };
+            }
+
+            acc[category].rows.push(...groupedRows);
+            acc[category].sections[section] = groupedRows;
+            return acc;
+          },
+          {} as Record<
+            string,
+            {
+              rows: any[];
+              sections: Record<string, any[]>;
+            }
+          >,
+        ),
+      )
+        .map(([category, categoryData]) => ({
+          category,
+          rows: categoryData.rows,
+          sections: Object.entries(categoryData.sections).sort(
+            ([sectionA, rowsA], [sectionB, rowsB]) => {
+              if (isSortingByAmount) {
+                return getSectionTotal(rowsA) - getSectionTotal(rowsB);
+              }
+
+              return sectionA.localeCompare(sectionB, undefined, {
+                sensitivity: 'base',
+              });
+            },
+          ),
+        }))
+        .sort((categoryA, categoryB) => {
+          if (isSortingByAmount) {
+            return (
+              getSectionTotal(categoryA.rows) - getSectionTotal(categoryB.rows)
+            );
+          }
+
+          return categoryA.category.localeCompare(
+            categoryB.category,
+            undefined,
+            {
+              sensitivity: 'base',
+            },
+          );
         })
     : [];
 
@@ -261,30 +434,198 @@ const Home = () => {
                 Clear All
               </Button>
             </Box>
-            {groupBy ? (
-              groupedTransactions.map(([group, groupedRows]) => (
-                <Box key={group} sx={{ mb: 4 }}>
+            {isPayeeGrouping ? (
+              groupedPayeeCategories.map(({ category, rows, sections }) => {
+                const categoryKey = `category:${category}`;
+                const categoryExpanded = Boolean(expandedGroups[categoryKey]);
+
+                return (
                   <Box
-                    display="flex"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    gap={2}
-                    mb={1}
+                    key={category}
+                    sx={{
+                      border: '1px solid rgba(255, 255, 255, 0.24)',
+                      borderRadius: 1,
+                      mb: 2,
+                      p: 2,
+                    }}
                   >
-                    <Typography variant="h6" sx={{ color: 'white' }}>
-                      {group === 'Unknown' ? '' : group}
-                    </Typography>
-                    {amountHeader ? (
-                      <Typography variant="subtitle1" sx={{ color: 'white' }}>
-                        Total: {getSectionTotal(groupedRows).toFixed(2)}
-                      </Typography>
-                    ) : null}
+                    <Box
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      gap={2}
+                      mb={1}
+                    >
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <IconButton
+                          aria-label={
+                            categoryExpanded
+                              ? 'Collapse category'
+                              : 'Expand category'
+                          }
+                          aria-expanded={categoryExpanded}
+                          onClick={() => toggleGroup(categoryKey)}
+                          sx={{
+                            color: 'white',
+                          }}
+                          size="small"
+                        >
+                          {categoryExpanded ? (
+                            <ExpandMoreIcon />
+                          ) : (
+                            <ChevronRightIcon />
+                          )}
+                        </IconButton>
+                        <Typography variant="h6" sx={{ color: 'white' }}>
+                          {category}
+                        </Typography>
+                      </Box>
+                      {amountHeader ? (
+                        <Typography variant="subtitle1" sx={{ color: 'white' }}>
+                          Total: {getSectionTotal(rows).toFixed(2)}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                    <Collapse
+                      in={categoryExpanded}
+                      timeout="auto"
+                      unmountOnExit
+                    >
+                      <Box sx={{ pl: 5 }}>
+                        {sections.map(([section, sectionRows]) => {
+                          const sectionKey = `section:${category}/${section}`;
+                          const sectionExpanded = Boolean(
+                            expandedGroups[sectionKey],
+                          );
+
+                          return (
+                            <Box
+                              key={sectionKey}
+                              sx={{
+                                border: '1px solid rgba(255, 255, 255, 0.18)',
+                                borderRadius: 1,
+                                mb: 2,
+                                p: 2,
+                              }}
+                            >
+                              <Box
+                                display="flex"
+                                justifyContent="space-between"
+                                alignItems="center"
+                                gap={2}
+                                mb={1}
+                              >
+                                <Box display="flex" alignItems="center" gap={1}>
+                                  <IconButton
+                                    aria-label={
+                                      sectionExpanded
+                                        ? 'Collapse section'
+                                        : 'Expand section'
+                                    }
+                                    aria-expanded={sectionExpanded}
+                                    onClick={() => toggleGroup(sectionKey)}
+                                    sx={{
+                                      color: 'white',
+                                    }}
+                                    size="small"
+                                  >
+                                    {sectionExpanded ? (
+                                      <ExpandMoreIcon />
+                                    ) : (
+                                      <ChevronRightIcon />
+                                    )}
+                                  </IconButton>
+                                  <Typography
+                                    variant="subtitle1"
+                                    sx={{ color: 'white' }}
+                                  >
+                                    {section}
+                                  </Typography>
+                                </Box>
+                                {amountHeader ? (
+                                  <Typography
+                                    variant="subtitle1"
+                                    sx={{ color: 'white' }}
+                                  >
+                                    Total:{' '}
+                                    {getSectionTotal(sectionRows).toFixed(2)}
+                                  </Typography>
+                                ) : null}
+                              </Box>
+                              <Collapse
+                                in={sectionExpanded}
+                                timeout="auto"
+                                unmountOnExit
+                              >
+                                <TransactionTable
+                                  headers={displayHeaders}
+                                  rows={sectionRows}
+                                />
+                              </Collapse>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    </Collapse>
                   </Box>
-                  <TransactionTable headers={headers} rows={groupedRows} />
-                </Box>
-              ))
+                );
+              })
+            ) : groupBy ? (
+              groupedTransactions.map(([group, groupedRows]) => {
+                const expanded = Boolean(expandedGroups[group]);
+
+                return (
+                  <Box
+                    key={group}
+                    sx={{
+                      border: '1px solid rgba(255, 255, 255, 0.24)',
+                      borderRadius: 1,
+                      mb: 2,
+                      p: 2,
+                    }}
+                  >
+                    <Box
+                      display="flex"
+                      justifyContent="space-between"
+                      alignItems="center"
+                      gap={2}
+                      mb={1}
+                    >
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <IconButton
+                          aria-label={
+                            expanded ? 'Collapse group' : 'Expand group'
+                          }
+                          aria-expanded={expanded}
+                          onClick={() => toggleGroup(group)}
+                          sx={{
+                            color: 'white',
+                          }}
+                          size="small"
+                        >
+                          {expanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                        </IconButton>
+                        <Typography variant="h6" sx={{ color: 'white' }}>
+                          {group === 'Unknown' ? '' : group}
+                        </Typography>
+                      </Box>
+                      {amountHeader ? (
+                        <Typography variant="subtitle1" sx={{ color: 'white' }}>
+                          Total: {getSectionTotal(groupedRows).toFixed(2)}
+                        </Typography>
+                      ) : null}
+                    </Box>
+                    <Collapse in={expanded} timeout="auto" unmountOnExit>
+                      <TransactionTable
+                        headers={displayHeaders}
+                        rows={groupedRows}
+                      />
+                    </Collapse>
+                  </Box>
+                );
+              })
             ) : (
-              <TransactionTable headers={headers} rows={sortedRows} />
+              <TransactionTable headers={displayHeaders} rows={sortedRows} />
             )}
           </>
         )}
