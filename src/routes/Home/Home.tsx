@@ -142,8 +142,21 @@ const Home = () => {
   };
 
   const handleDataParsed = (data: any[]) => {
+    const parsedHeaders = data.length ? Object.keys(data[0]) : [];
+    const parsedAmountHeader =
+      parsedHeaders.find(
+        (header) => header.trim().toLowerCase() === 'amount',
+      ) ||
+      parsedHeaders.find((header) =>
+        header.trim().toLowerCase().includes('amount'),
+      ) ||
+      parsedHeaders.find((header) => header.trim().toLowerCase() === 'debit') ||
+      parsedHeaders.find((header) => header.trim().toLowerCase() === 'credit');
+
     setRows(data);
-    setHeaders(data.length ? Object.keys(data[0]) : []);
+    setHeaders(parsedHeaders);
+    setGroupBy('Payee');
+    setSortBy(parsedAmountHeader || '');
   };
 
   const clearData = () => {
@@ -210,6 +223,8 @@ const Home = () => {
       0,
     );
   };
+
+  const formatAmount = (amount: number) => amount.toFixed(2);
 
   const sortRows = (sectionRows: any[], key: string) => {
     if (!key) return sectionRows;
@@ -326,6 +341,70 @@ const Home = () => {
           );
         })
     : [];
+  const spendingAnalysis = amountHeader
+    ? rows.reduce(
+        (analysis, row) => {
+          const amount = parseAmount(getRowValue(row, amountHeader));
+          const payee = String(getRowValue(row, 'Payee') || 'Unknown');
+          const [category, section] = getGroupedPayee(payee)
+            .toString()
+            .split(' / ', 2);
+
+          analysis.net += amount;
+
+          if (amount >= 0) {
+            analysis.incoming += amount;
+            return analysis;
+          }
+
+          const spend = Math.abs(amount);
+          analysis.totalSpend += spend;
+          analysis.transactionCount += 1;
+
+          if (category !== 'Incoming payments') {
+            analysis.categories[category] =
+              (analysis.categories[category] || 0) + spend;
+            analysis.sections[`${category} / ${section}`] =
+              (analysis.sections[`${category} / ${section}`] || 0) + spend;
+          }
+
+          analysis.payees[payee] = (analysis.payees[payee] || 0) + spend;
+
+          if (!analysis.largestTransaction || spend > analysis.largestSpend) {
+            analysis.largestSpend = spend;
+            analysis.largestTransaction = row;
+          }
+
+          return analysis;
+        },
+        {
+          totalSpend: 0,
+          incoming: 0,
+          net: 0,
+          transactionCount: 0,
+          largestSpend: 0,
+          largestTransaction: null as any,
+          categories: {} as Record<string, number>,
+          sections: {} as Record<string, number>,
+          payees: {} as Record<string, number>,
+        },
+      )
+    : null;
+  const topCategories = spendingAnalysis
+    ? (Object.entries(spendingAnalysis.categories) as [string, number][])
+        .sort(([, amountA], [, amountB]) => amountB - amountA)
+        .slice(0, 4)
+    : [];
+  const topSections = spendingAnalysis
+    ? (Object.entries(spendingAnalysis.sections) as [string, number][])
+        .sort(([, amountA], [, amountB]) => amountB - amountA)
+        .slice(0, 4)
+    : [];
+  const topPayees = spendingAnalysis
+    ? (Object.entries(spendingAnalysis.payees) as [string, number][])
+        .sort(([, amountA], [, amountB]) => amountB - amountA)
+        .slice(0, 4)
+    : [];
 
   return (
     <Box
@@ -434,6 +513,125 @@ const Home = () => {
                 Clear All
               </Button>
             </Box>
+            {spendingAnalysis ? (
+              <Box
+                sx={{
+                  border: '1px solid rgba(255, 255, 255, 0.24)',
+                  borderRadius: 1,
+                  mb: 2,
+                  p: 2,
+                }}
+              >
+                <Typography variant="h6" sx={{ color: 'white', mb: 2 }}>
+                  Spending Analysis
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      sm: 'repeat(2, minmax(0, 1fr))',
+                      md: 'repeat(4, minmax(0, 1fr))',
+                    },
+                    gap: 2,
+                    mb: 3,
+                  }}
+                >
+                  {[
+                    ['Total spend', formatAmount(spendingAnalysis.totalSpend)],
+                    ['Incoming', formatAmount(spendingAnalysis.incoming)],
+                    ['Net', formatAmount(spendingAnalysis.net)],
+                    [
+                      'Transactions',
+                      spendingAnalysis.transactionCount.toString(),
+                    ],
+                  ].map(([label, value]) => (
+                    <Box
+                      key={label}
+                      sx={{
+                        border: '1px solid rgba(255, 255, 255, 0.16)',
+                        borderRadius: 1,
+                        p: 1.5,
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ color: 'rgba(255, 255, 255, 0.7)' }}
+                      >
+                        {label}
+                      </Typography>
+                      <Typography variant="h6" sx={{ color: 'white' }}>
+                        {value}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      md: 'repeat(3, minmax(0, 1fr))',
+                    },
+                    gap: 2,
+                  }}
+                >
+                  {[
+                    ['Top categories', topCategories],
+                    ['Top sections', topSections],
+                    ['Top payees', topPayees],
+                  ].map(([label, items]) => (
+                    <Box key={label as string}>
+                      <Typography
+                        variant="subtitle1"
+                        sx={{ color: 'white', mb: 1 }}
+                      >
+                        {label as string}
+                      </Typography>
+                      {(items as [string, number][]).map(([name, amount]) => (
+                        <Box
+                          key={name}
+                          display="flex"
+                          justifyContent="space-between"
+                          gap={2}
+                          sx={{ py: 0.5 }}
+                        >
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'rgba(255, 255, 255, 0.84)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: 'white' }}>
+                            {formatAmount(amount)}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  ))}
+                </Box>
+                {spendingAnalysis.largestTransaction ? (
+                  <Typography
+                    variant="body2"
+                    sx={{ color: 'rgba(255, 255, 255, 0.84)', mt: 2 }}
+                  >
+                    Largest transaction:{' '}
+                    {String(
+                      getRowValue(
+                        spendingAnalysis.largestTransaction,
+                        'Payee',
+                      ) || 'Unknown',
+                    )}{' '}
+                    ({formatAmount(spendingAnalysis.largestSpend)})
+                  </Typography>
+                ) : null}
+              </Box>
+            ) : null}
             {isPayeeGrouping ? (
               groupedPayeeCategories.map(({ category, rows, sections }) => {
                 const categoryKey = `category:${category}`;
